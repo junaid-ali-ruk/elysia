@@ -1,0 +1,31 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "src/index.ts",
+            "use": "@vercel/node",
+            "config": {
+                "includeFiles": [
+                    "public/**",
+                    "src/types/**",
+                    "src/services/**",
+                    "src/middleware/**",
+                    "src/utils/**",
+                    "src/routes/**"
+                ]
+            }
+        }
+    ],
+    "routes": [
+        {
+            "src": "/(.*)",
+            "dest": "src/index.ts"
+        }
+    ],
+    "functions": {
+        "src/index.ts": {
+            "memory": 1024,
+            "maxDuration": 10
+        }
+    }
+}

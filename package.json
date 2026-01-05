@@ -9,6 +9,7 @@
     "@elysiajs/cors": "^1.4.1",
     "@elysiajs/static": "^1.4.7",
     "@types/mime-types": "^3.0.1",
+    "@vercel/node": "^5.5.16",
     "elysia": "latest",
     "mime-types": "^3.0.2",
     "nanoid": "^5.1.6",
