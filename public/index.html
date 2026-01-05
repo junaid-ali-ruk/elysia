@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Upload & CDN API</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <h1>FileCDN</h1>
+            </div>
+            <div class="actions">
+                <button class="btn btn-primary" onclick="showUploadModal()">
+                    <i class="fas fa-plus"></i> Upload Files
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Overview -->
+        <div class="stats-grid" id="stats-container">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Main Content -->
+        <main class="content">
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="search-input" placeholder="Search files..." onkeyup="handleSearch(event)">
+                </div>
+
+                <div class="filters">
+                    <div class="filter-group">
+                        <button class="filter-btn active" onclick="filterByCategory('all')">All</button>
+                        <button class="filter-btn" onclick="filterByCategory('images')">Images</button>
+                        <button class="filter-btn" onclick="filterByCategory('documents')">Docs</button>
+                        <button class="filter-btn" onclick="filterByCategory('videos')">Videos</button>
+                        <button class="filter-btn" onclick="filterByCategory('audio')">Audio</button>
+                    </div>
+
+                    <div class="sort-dropdown">
+                        <select id="sort-select" onchange="handleSort()">
+                            <option value="uploadedAt:desc">Newest First</option>
+                            <option value="uploadedAt:asc">Oldest First</option>
+                            <option value="size:desc">Largest Size</option>
+                            <option value="size:asc">Smallest Size</option>
+                            <option value="downloads:desc">Most Downloads</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Grid -->
+            <div class="file-grid" id="file-grid">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Loading State -->
+            <div class="loading hidden" id="loading">
+                <div class="spinner"></div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state hidden" id="empty-state">
+                <i class="fas fa-folder-open"></i>
+                <h3>No files found</h3>
+                <p>Upload some files or adjust your filters</p>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination">
+                <!-- Populated by JS -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Upload Modal -->
+    <div class="modal-overlay" id="upload-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Upload Files</h2>
+                <button class="close-btn" onclick="closeUploadModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-zone" id="drop-zone">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p>Drag & drop files here or click to browse</p>
+                    <input type="file" id="file-input" multiple onchange="handleFiles(this.files)" hidden>
+                </div>
+
+                <div class="upload-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="opt-thumbnail" checked> Generate Thumbnails
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="opt-public" checked> Public Access
+                    </label>
+                </div>
+
+                <div class="upload-preview" id="upload-preview">
+                    <!-- Files to upload -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="uploadFiles()" id="upload-btn" disabled>
+                    Upload Files
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Details Modal -->
+    <div class="modal-overlay" id="file-modal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h2 id="file-modal-title">File Details</h2>
+                <button class="close-btn" onclick="closeFileModal()">&times;</button>
+            </div>
+            <div class="modal-body file-details-body">
+                <div class="file-preview-large" id="file-modal-preview"></div>
+                <div class="file-info-panel">
+                    <div class="info-group">
+                        <label>File ID</label>
+                        <div class="copy-input">
+                            <input type="text" id="file-id" readonly>
+                            <button onclick="copyToClipboard('file-id')"><i class="fas fa-copy"></i></button>
+                        </div>
+                    </div>
+                    <div class="info-group">
+                        <label>CDN URL</label>
+                        <div class="copy-input">
+                            <input type="text" id="file-url" readonly>
+                            <button onclick="copyToClipboard('file-url')"><i class="fas fa-copy"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="metadata-grid" id="file-metadata">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <div class="actions-group">
+                        <h3>Actions</h3>
+                        <div class="action-buttons">
+                            <button class="btn btn-outline" id="btn-download"><i class="fas fa-download"></i>
+                                Download</button>
+                            <button class="btn btn-danger" id="btn-delete"><i class="fas fa-trash"></i> Delete</button>
+                        </div>
+                    </div>
+
+                    <div class="transform-presets" id="transform-presets">
+                        <h3>Transform Presets</h3>
+                        <div class="preset-buttons">
+                            <button class="chip" onclick="openPreset('small')">Small</button>
+                            <button class="chip" onclick="openPreset('medium')">Medium</button>
+                            <button class="chip" onclick="openPreset('large')">Large</button>
+                            <button class="chip" onclick="openPreset('avatar')">Avatar</button>
+                            <button class="chip" onclick="openPreset('grayscale')">Grayscale</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+</body>
+
+</html>

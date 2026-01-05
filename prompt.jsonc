@@ -1,0 +1,588 @@
+{
+  "project": "File Upload & CDN API with Elysia + Bun",
+  "description": "Build a complete file upload and CDN API server with image processing capabilities",
+  
+  "tech_stack": {
+    "runtime": "Bun",
+    "framework": "Elysia",
+    "packages": {
+      "@elysiajs/cors": "CORS support",
+      "@elysiajs/static": "Serve static files",
+      "mime-types": "File type detection",
+      "nanoid": "Generate unique file IDs",
+      "sharp": "Image processing and transformation"
+    }
+  },
+
+  "structure": {
+    "root": "file-cdn-api/",
+    "directories": [
+      "src/",
+      "src/routes/",
+      "src/services/",
+      "src/middleware/",
+      "src/utils/",
+      "src/types/",
+      "public/",
+      "public/css/",
+      "public/js/",
+      "uploads/",
+      "uploads/images/",
+      "uploads/documents/",
+      "uploads/videos/",
+      "uploads/audio/",
+      "uploads/others/",
+      "uploads/thumbnails/",
+      "cache/",
+      "data/"
+    ]
+  },
+
+  "files_to_create": [
+    
+    // ===========================================
+    // TYPES
+    // ===========================================
+    {
+      "path": "src/types/index.ts",
+      "description": "TypeScript interfaces and types",
+      "contents": {
+        "FileMetadata": {
+          "id": "string - unique nanoid",
+          "originalName": "string - original filename",
+          "fileName": "string - stored filename",
+          "mimeType": "string",
+          "size": "number - bytes",
+          "category": "FileCategory",
+          "path": "string - file system path",
+          "url": "string - CDN URL",
+          "thumbnailUrl": "string | undefined",
+          "width": "number | undefined - for images",
+          "height": "number | undefined - for images",
+          "uploadedAt": "number - timestamp",
+          "expiresAt": "number | undefined",
+          "downloads": "number",
+          "isPublic": "boolean",
+          "checksum": "string - SHA-256 hash",
+          "tags": "string[] | undefined"
+        },
+        "FileCategory": "'images' | 'documents' | 'videos' | 'audio' | 'others'",
+        "UploadOptions": {
+          "generateThumbnail": "boolean",
+          "maxWidth": "number",
+          "maxHeight": "number",
+          "quality": "number 1-100",
+          "isPublic": "boolean",
+          "expiresIn": "number - seconds",
+          "tags": "string[]"
+        },
+        "ImageTransformOptions": {
+          "width": "number",
+          "height": "number",
+          "quality": "number 1-100",
+          "format": "'jpeg' | 'png' | 'webp' | 'avif'",
+          "fit": "'cover' | 'contain' | 'fill' | 'inside' | 'outside'",
+          "blur": "number",
+          "grayscale": "boolean"
+        }
+      }
+    },
+
+    // ===========================================
+    // UTILS
+    // ===========================================
+    {
+      "path": "src/utils/helpers.ts",
+      "description": "Utility functions",
+      "functions": [
+        {
+          "name": "generateFileId",
+          "description": "Generate unique ID using nanoid(12)"
+        },
+        {
+          "name": "getFileCategory",
+          "params": "mimeType: string",
+          "returns": "FileCategory",
+          "logic": "Check mimeType prefix: image/ -> images, video/ -> videos, audio/ -> audio, pdf/document/text -> documents, else -> others"
+        },
+        {
+          "name": "formatBytes",
+          "params": "bytes: number",
+          "returns": "string like '1.5 MB'"
+        },
+        {
+          "name": "generateChecksum",
+          "params": "buffer: ArrayBuffer",
+          "returns": "Promise<string>",
+          "logic": "Use crypto.subtle.digest('SHA-256', buffer) and convert to hex"
+        },
+        {
+          "name": "sanitizeFilename",
+          "params": "filename: string",
+          "returns": "string - lowercase, replace special chars with underscore"
+        },
+        {
+          "name": "getExtension",
+          "params": "filename: string",
+          "returns": "string - file extension without dot"
+        },
+        {
+          "name": "isImage",
+          "params": "mimeType: string",
+          "returns": "boolean"
+        },
+        {
+          "name": "validateFile",
+          "params": "mimeType: string, size: number",
+          "returns": "{ valid: boolean, error?: string }",
+          "logic": "Check against max sizes: images 10MB, documents 50MB, videos 500MB, audio 50MB, others 25MB"
+        }
+      ]
+    },
+
+    // ===========================================
+    // SERVICES
+    // ===========================================
+    {
+      "path": "src/services/image.ts",
+      "description": "Image processing service using Sharp",
+      "class": "ImageService",
+      "methods": [
+        {
+          "name": "transform",
+          "params": "inputPath: string, options: ImageTransformOptions",
+          "returns": "Promise<Buffer>",
+          "logic": [
+            "Create sharp pipeline from inputPath",
+            "Apply resize if width/height provided",
+            "Apply blur if specified (max 100)",
+            "Apply grayscale if true",
+            "Convert to format with quality",
+            "Return buffer"
+          ]
+        },
+        {
+          "name": "generateThumbnail",
+          "params": "inputPath: string, outputPath: string, size: number = 200",
+          "logic": "Resize to size x size, fit cover, center, jpeg quality 80"
+        },
+        {
+          "name": "getMetadata",
+          "params": "inputPath: string",
+          "returns": "Promise<{ width: number, height: number }>",
+          "logic": "Use sharp(inputPath).metadata()"
+        },
+        {
+          "name": "getCachedTransform",
+          "params": "fileId: string, inputPath: string, options: ImageTransformOptions",
+          "returns": "Promise<{ buffer: Buffer, cached: boolean }>",
+          "logic": [
+            "Generate cache key from fileId + options",
+            "Check if cache file exists in ./cache/",
+            "If exists, return cached buffer",
+            "If not, transform and save to cache, return buffer"
+          ]
+        }
+      ],
+      "export": "Export singleton instance: imageService"
+    },
+
+    {
+      "path": "src/services/storage.ts",
+      "description": "File storage service with JSON metadata persistence",
+      "class": "StorageService",
+      "properties": {
+        "files": "Map<string, FileMetadata>",
+        "initialized": "boolean"
+      },
+      "methods": [
+        {
+          "name": "init",
+          "description": "Create directories, load metadata from ./data/files.json"
+        },
+        {
+          "name": "loadMetadata",
+          "description": "Read ./data/files.json into this.files Map"
+        },
+        {
+          "name": "saveMetadata",
+          "description": "Write this.files Map to ./data/files.json"
+        },
+        {
+          "name": "upload",
+          "params": "file: File, options: UploadOptions",
+          "returns": "Promise<FileMetadata>",
+          "logic": [
+            "Generate ID with nanoid",
+            "Get category from mimeType",
+            "Generate checksum, check for duplicates",
+            "Write file to uploads/{category}/{id}.{ext}",
+            "If image: get dimensions, generate thumbnail",
+            "If maxWidth/maxHeight: resize image",
+            "Create and save FileMetadata",
+            "Return metadata"
+          ]
+        },
+        {
+          "name": "uploadMultiple",
+          "params": "files: File[], options: UploadOptions",
+          "returns": "Promise<FileMetadata[]>"
+        },
+        {
+          "name": "getFile",
+          "params": "id: string",
+          "returns": "FileMetadata | undefined"
+        },
+        {
+          "name": "getFileContent",
+          "params": "id: string",
+          "returns": "Promise<{ file: BunFile, metadata: FileMetadata } | null>",
+          "logic": "Check expiration, increment downloads counter"
+        },
+        {
+          "name": "getThumbnail",
+          "params": "id: string",
+          "returns": "Promise<BunFile | null>"
+        },
+        {
+          "name": "listFiles",
+          "params": "{ page, limit, category, search, sortBy, sortOrder }",
+          "returns": "{ files, total, page, totalPages }",
+          "logic": "Filter, sort, paginate files"
+        },
+        {
+          "name": "deleteFile",
+          "params": "id: string",
+          "returns": "Promise<boolean>",
+          "logic": "Delete file, thumbnail, clear cache, remove from metadata"
+        },
+        {
+          "name": "deleteMultiple",
+          "params": "ids: string[]",
+          "returns": "Promise<{ deleted: string[], failed: string[] }>"
+        },
+        {
+          "name": "updateFile",
+          "params": "id: string, updates: Partial<FileMetadata>",
+          "returns": "Promise<FileMetadata | null>"
+        },
+        {
+          "name": "getStats",
+          "returns": "Promise<StorageStats>",
+          "logic": "Calculate totalFiles, totalSize, byCategory counts"
+        },
+        {
+          "name": "cleanupExpired",
+          "returns": "Promise<number>",
+          "logic": "Delete files where expiresAt < Date.now()"
+        }
+      ],
+      "export": "Export singleton instance: storageService"
+    },
+
+    // ===========================================
+    // MIDDLEWARE
+    // ===========================================
+    {
+      "path": "src/middleware/auth.ts",
+      "description": "Simple API key authentication middleware",
+      "implementation": [
+        "Define API_KEYS Set with test keys",
+        "Define ADMIN_KEYS Set with admin keys",
+        "Export authMiddleware Elysia plugin that derives:",
+        "  - apiKey from X-API-Key header or ?apiKey query",
+        "  - isAuthenticated: boolean",
+        "  - isAdmin: boolean",
+        "Export requireAuth guard plugin",
+        "Export requireAdmin guard plugin"
+      ]
+    },
+
+    // ===========================================
+    // ROUTES
+    // ===========================================
+    {
+      "path": "src/routes/upload.ts",
+      "description": "Upload API routes",
+      "prefix": "/api/upload",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/single",
+          "body": "{ file: File }",
+          "query": "thumbnail, public, tags, maxWidth, maxHeight, quality, expiresIn",
+          "logic": "Validate file, call storageService.upload()"
+        },
+        {
+          "method": "POST",
+          "path": "/multiple",
+          "body": "{ files: File[] }",
+          "query": "thumbnail, public, tags",
+          "logic": "Validate all files, call storageService.uploadMultiple()"
+        },
+        {
+          "method": "POST",
+          "path": "/url",
+          "body": "{ url: string, filename?: string }",
+          "logic": "Fetch URL, create File from blob, upload"
+        },
+        {
+          "method": "POST",
+          "path": "/base64",
+          "body": "{ data: string, filename: string, mimeType: string }",
+          "logic": "Decode base64, create File from buffer, upload"
+        }
+      ]
+    },
+
+    {
+      "path": "src/routes/files.ts",
+      "description": "File management API routes",
+      "prefix": "/api/files",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/",
+          "query": "page, limit, category, search, sortBy, sortOrder",
+          "logic": "Call storageService.listFiles()"
+        },
+        {
+          "method": "GET",
+          "path": "/:id",
+          "logic": "Call storageService.getFile()"
+        },
+        {
+          "method": "PATCH",
+          "path": "/:id",
+          "body": "{ isPublic?, tags?, expiresIn? }",
+          "logic": "Call storageService.updateFile()"
+        },
+        {
+          "method": "DELETE",
+          "path": "/:id",
+          "logic": "Call storageService.deleteFile()"
+        },
+        {
+          "method": "POST",
+          "path": "/delete-multiple",
+          "body": "{ ids: string[] }",
+          "logic": "Call storageService.deleteMultiple()"
+        },
+        {
+          "method": "GET",
+          "path": "/stats/overview",
+          "logic": "Call storageService.getStats()"
+        },
+        {
+          "method": "POST",
+          "path": "/cleanup",
+          "logic": "Call storageService.cleanupExpired()"
+        }
+      ]
+    },
+
+    {
+      "path": "src/routes/cdn.ts",
+      "description": "CDN routes for serving and transforming files",
+      "prefix": "/cdn",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/:id",
+          "logic": [
+            "Get file content from storageService",
+            "Check isPublic or API key",
+            "Set CDN headers: Content-Type, ETag, Cache-Control (max-age=31536000, immutable)",
+            "Return Bun.file()"
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/:id/download",
+          "logic": "Same as above but Content-Disposition: attachment"
+        },
+        {
+          "method": "GET",
+          "path": "/thumb/:id",
+          "logic": "Return thumbnail from storageService.getThumbnail()"
+        },
+        {
+          "method": "GET",
+          "path": "/:id/transform",
+          "query": "w, h, q, f, fit, blur, grayscale",
+          "logic": [
+            "Parse query params to ImageTransformOptions",
+            "Call imageService.getCachedTransform()",
+            "Set X-Cache header: HIT or MISS",
+            "Return transformed buffer"
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/:id/:preset",
+          "presets": {
+            "small": "width: 150, height: 150, fit: cover, quality: 80",
+            "medium": "width: 400, height: 400, fit: inside, quality: 85",
+            "large": "width: 800, height: 800, fit: inside, quality: 90",
+            "avatar": "width: 100, height: 100, fit: cover, quality: 80, format: webp",
+            "banner": "width: 1200, height: 400, fit: cover, quality: 85, format: webp",
+            "og": "width: 1200, height: 630, fit: cover, quality: 85",
+            "blur": "width: 20, blur: 10, quality: 30"
+          },
+          "logic": "Match preset, call imageService.getCachedTransform()"
+        }
+      ]
+    },
+
+    // ===========================================
+    // MAIN ENTRY
+    // ===========================================
+    {
+      "path": "src/index.ts",
+      "description": "Main application entry point",
+      "implementation": [
+        "Import all routes and services",
+        "Call await storageService.init()",
+        "Create Elysia app",
+        "Use cors() plugin with origin: '*'",
+        "Use staticPlugin({ assets: 'public', prefix: '/' })",
+        "Use uploadRoutes",
+        "Use filesRoutes",
+        "Use cdnRoutes",
+        "GET / -> serve public/index.html",
+        "GET /health -> return { status, uptime, files, storage }",
+        "GET /api -> return API documentation object",
+        "Add onError handler for VALIDATION, NOT_FOUND, 500",
+        "Listen on port 3000",
+        "Log startup message with URLs"
+      ]
+    },
+
+    // ===========================================
+    // FRONTEND
+    // ===========================================
+    {
+      "path": "public/index.html",
+      "description": "Dashboard UI HTML",
+      "sections": [
+        "Header with logo and Upload button",
+        "Stats cards: Total Files, Storage Used, Images, Documents",
+        "Filters: Search input, Category filter buttons, Sort dropdown",
+        "Files grid with cards showing preview, name, size, date, actions",
+        "Pagination",
+        "Upload Modal: Drag & drop zone, file input, options (thumbnail, public, tags), preview, progress",
+        "File Details Modal: Preview, metadata list, URLs with copy buttons, transform presets"
+      ]
+    },
+
+    {
+      "path": "public/css/style.css",
+      "description": "Modern dark theme CSS",
+      "theme": {
+        "bg-primary": "#0a0a0b",
+        "bg-secondary": "#141416",
+        "bg-card": "#1c1c1f",
+        "text-primary": "#ffffff",
+        "text-secondary": "#a1a1aa",
+        "accent": "#6366f1",
+        "success": "#22c55e",
+        "danger": "#ef4444"
+      },
+      "features": [
+        "CSS variables for theming",
+        "Grid layouts for stats and files",
+        "Card hover effects with transform",
+        "Modal overlay with backdrop",
+        "Drag & drop zone styling",
+        "Progress bar animations",
+        "Toast notifications",
+        "Responsive breakpoints",
+        "Custom scrollbar",
+        "File type icons"
+      ]
+    },
+
+    {
+      "path": "public/js/app.js",
+      "description": "Dashboard JavaScript",
+      "state": {
+        "files": "array of files",
+        "currentPage": "number",
+        "totalPages": "number",
+        "category": "'all' | category",
+        "search": "string",
+        "sortBy": "string",
+        "sortOrder": "'asc' | 'desc'",
+        "uploadQueue": "File[]"
+      },
+      "functions": [
+        "loadStats() - fetch /api/files/stats/overview",
+        "loadFiles() - fetch /api/files with params",
+        "renderFiles() - create file cards HTML",
+        "renderPagination() - create page buttons",
+        "filterByCategory(category) - update filter",
+        "handleSearch(event) - search on Enter",
+        "handleSort() - update sort",
+        "setupUploadZone() - drag/drop events",
+        "handleFiles(fileList) - add to uploadQueue",
+        "renderUploadPreview() - show selected files",
+        "uploadFiles() - POST each file with progress",
+        "showUploadModal() / closeUploadModal()",
+        "showFileDetails(id) - show file modal",
+        "closeFileModal()",
+        "copyToClipboard(inputId)",
+        "copyUrl(url)",
+        "downloadFile(id) - open /cdn/:id/download",
+        "deleteFile(id) - DELETE /api/files/:id",
+        "openPreset(id, preset) - open transform URL",
+        "showToast(message, type)",
+        "formatBytes(bytes)",
+        "formatDate(timestamp)",
+        "getFileIcon(category)"
+      ]
+    }
+  ],
+
+  "api_response_format": {
+    "success": {
+      "success": true,
+      "data": "response data",
+      "message": "optional message"
+    },
+    "error": {
+      "success": false,
+      "error": "error type",
+      "message": "error details"
+    },
+    "paginated": {
+      "success": true,
+      "data": [],
+      "page": 1,
+      "limit": 20,
+      "total": 100,
+      "totalPages": 5
+    }
+  },
+
+  "important_notes": [
+    "Use Bun.file() and Bun.write() for file operations",
+    "Use crypto.subtle.digest for checksum generation",
+    "Use sharp for all image processing",
+    "Store metadata in JSON file (./data/files.json)",
+    "Generate thumbnails as 200x200 JPEG",
+    "Cache transformed images in ./cache/ directory",
+    "Set proper CDN headers for caching",
+    "Validate file types and sizes before upload",
+    "Check file expiration on access",
+    "Increment download counter on file access",
+    "Support duplicate detection via checksum",
+    "Use nanoid(12) for file IDs",
+    "All timestamps are Unix milliseconds (Date.now())"
+  ],
+
+  "run_commands": {
+    "install": "bun install",
+    "dev": "bun run dev",
+    "start": "bun run src/index.ts"
+  }
+}
