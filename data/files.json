@@ -269,5 +269,19 @@
     "downloads": 0,
     "isPublic": true,
     "checksum": "d73a6f1fe56a55bdf49ceab6ebe03a24cf41dfc88f6d102166c7af98a42c62eb"
+  },
+  "41QpZT1l-r9u": {
+    "id": "41QpZT1l-r9u",
+    "originalName": "8 Weird Things That Happen to Your Organs If You Fast for 24 Hours.mp4",
+    "fileName": "41QpZT1l-r9u.mp4",
+    "mimeType": "video/mp4",
+    "size": 16565194,
+    "category": "videos",
+    "path": "uploads\\videos\\41QpZT1l-r9u.mp4",
+    "url": "http://localhost:3000/cdn/41QpZT1l-r9u",
+    "uploadedAt": 1767625469361,
+    "downloads": 0,
+    "isPublic": true,
+    "checksum": "f66576c004f61e55acc70ab7a5e9e36101269d810ae11e3f54de35a253b17f1c"
   }
 }

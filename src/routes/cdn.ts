@@ -52,7 +52,7 @@ export const cdnRoutes = new Elysia({ prefix: '/cdn' })
     })
 
     // GET /cdn/:id/download - Force download
-    .get('/:id/download', async ({ params, set, apiKey, isAuthenticated }:any) => {
+    .get('/:id/download', async ({ params, set, apiKey, isAuthenticated }: any) => {
         const result = await storageService.getFileContent(params.id);
 
         if (!result) {
@@ -128,7 +128,7 @@ export const cdnRoutes = new Elysia({ prefix: '/cdn' })
                 set.headers['Cache-Control'] = 'public, max-age=31536000, immutable';
                 set.headers['X-Cache'] = cached ? 'HIT' : 'MISS';
 
-                return new Response(buffer);
+                return new Response(buffer as any);
             } catch (error) {
                 set.status = 500;
                 return 'Transformation failed';
@@ -180,7 +180,7 @@ export const cdnRoutes = new Elysia({ prefix: '/cdn' })
             set.headers['Cache-Control'] = 'public, max-age=31536000, immutable';
             set.headers['X-Cache'] = cached ? 'HIT' : 'MISS';
 
-            return new Response(buffer);
+            return new Response(buffer as any);
         } catch (error) {
             set.status = 500;
             return 'Transformation failed';
